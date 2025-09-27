@@ -1,0 +1,262 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>対数縦軸タイムライン（スマホ）</title>
+<style>
+  :root{
+    --bg:#0f1115; --fg:#e6e7ea; --muted:#9aa0a6; --accent:#7aa2ff; --line:#2a2f3a;
+    --tech:#00d1b2; --war:#ff6b6b; --culture:#ffd166; --nature:#8ecae6; --other:#c792ea;
+    --band1:#12151c; --band2:#151924;
+    --dot: 10px;
+    --lane-w: 4px;
+    --content-w: min(680px, 92vw);
+  }
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif;}
+  .app{min-height:100vh;position:relative}
+  header{
+    position:sticky; top:0; z-index:10; backdrop-filter: blur(10px);
+    background:color-mix(in oklab, var(--bg) 75%, transparent);
+    border-bottom:1px solid var(--line); padding:10px 14px 8px;
+  }
+  header .row{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  h1{font-size:16px;margin:0}
+  .meta{color:var(--muted);font-size:12px}
+  .legend{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+  .key{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+  .sw{width:10px;height:10px;border-radius:2px}
+  .sw.tech{background:var(--tech)} .sw.war{background:var(--war)} .sw.culture{background:var(--culture)}
+  .sw.nature{background:var(--nature)} .sw.other{background:var(--other)}
+  .container{
+    width:var(--content-w); margin:0 auto; position:relative;
+  }
+  .bands{position:relative}
+  .band{
+    position:absolute; left:0; right:0; border-top:1px dashed var(--line);
+    color:var(--muted); font-size:12px; padding-top:2px;
+  }
+  .band .label{position:absolute; left:8px; transform:translateY(-100%); background:transparent}
+  .lane{
+    position:absolute; left:18px; top:0; bottom:0; width:var(--lane-w); background:linear-gradient(var(--line), var(--line));
+    border-radius:2px;
+  }
+  .nowpin{
+    position:absolute; left:8px; top:0; transform:translateY(-50%);
+    background:var(--accent); color:#001; font-weight:700; font-size:11px;
+    padding:2px 6px; border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,.2);
+  }
+  .event{
+    position:absolute; left:32px; display:flex; align-items:center; gap:10px;
+    max-width:calc(var(--content-w) - 56px); cursor:pointer;
+  }
+  .event .dot{
+    width:var(--dot); height:var(--dot); border-radius:50%;
+    box-shadow:0 0 0 2px rgba(0,0,0,.25);
+  }
+  .event .card{
+    background:#141821; border:1px solid var(--line); border-radius:10px; padding:8px 10px;
+  }
+  .event .title{font-size:14px;margin:0 0 3px 0}
+  .event .sub{font-size:12px;color:var(--muted)}
+  .event.tech .dot{background:var(--tech)}
+  .event.war .dot{background:var(--war)}
+  .event.culture .dot{background:var(--culture)}
+  .event.nature .dot{background:var(--nature)}
+  .event.other .dot{background:var(--other)}
+  .hint{position:fixed; right:10px; bottom:12px; background:#141821; color:var(--muted);
+        font-size:12px; border:1px solid var(--line); border-radius:999px; padding:6px 10px; opacity:.85}
+  .details{
+    position:fixed; left:0; right:0; bottom:0; z-index:20; transform:translateY(100%);
+    background:#121620; border-top:1px solid var(--line); border-radius:14px 14px 0 0;
+    box-shadow:0 -10px 30px rgba(0,0,0,.3); transition:transform .25s ease; padding:12px 14px 18px;
+  }
+  .details.show{transform:translateY(0)}
+  .details h2{margin:0 0 4px 0; font-size:16px}
+  .details .small{color:var(--muted); font-size:12px}
+  .close{position:absolute; right:12px; top:8px; border:0; background:transparent; color:var(--muted); font-size:22px}
+</style>
+
+<header>
+  <div class="row">
+    <h1>対数縦軸タイムライン</h1>
+    <div class="meta">
+      上端＝現在。下へ行くほど過去（log10 年BP）。タップで詳細。
+      <span id="now"></span>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="key"><span class="sw war"></span>戦争</div>
+    <div class="key"><span class="sw tech"></span>技術</div>
+    <div class="key"><span class="sw culture"></span>文化/社会</div>
+    <div class="key"><span class="sw nature"></span>自然/人類史</div>
+    <div class="key"><span class="sw other"></span>その他</div>
+  </div>
+</header>
+
+<div class="app">
+  <div class="container">
+    <div class="bands" id="bands"></div>
+    <div class="lane"></div>
+    <div class="nowpin" id="nowpin">Now</div>
+    <div id="events"></div>
+  </div>
+</div>
+
+<div class="hint">スクロール＝過去へ</div>
+
+<div class="details" id="details">
+  <button class="close" id="closeBtn" aria-label="閉じる">×</button>
+  <h2 id="dTitle"></h2>
+  <div class="small" id="dMeta"></div>
+  <p id="dDesc" style="margin-top:8px; line-height:1.5"></p>
+</div>
+
+<script>
+  // ===== パラメータ =====
+  const NOW = new Date();
+  const NOW_YEAR = NOW.getUTCFullYear();
+  const MAX_YEARS_BP = 100_000; // どこまで遡るか（年BP）
+  const PIXELS_PER_DECADE = 1000; // log10で1桁ぶんの高さ(px)
+  const PAD_TOP = 30, PAD_BOTTOM = 200;
+
+  // 対数スケール: yearsAgo(>=0) → y(px)
+  const yOf = (yearsAgo) => {
+    if (yearsAgo < 0) yearsAgo = 0;
+    return Math.log10(yearsAgo + 1) * PIXELS_PER_DECADE;
+  };
+
+  // レイアウト高さ
+  const totalHeight = yOf(MAX_YEARS_BP) + PAD_TOP + PAD_BOTTOM;
+
+  // ===== イベント定義 =====
+  // year: 西暦（BCEは負数: -1200 = 紀元前1201相当の誤差ありだが見た目重視）
+  // もしくは bp: 現在からの年数（優先）
+  const events = [
+    // 近代〜現代
+    { title:"第二次世界大戦", year:1939, desc:"1939–1945。世界規模の総力戦。", cat:"war" },
+    { title:"第一次世界大戦", year:1914, desc:"1914–1918。近代工業化戦争の嚆矢。", cat:"war" },
+    { title:"インターネットの普及", year:1983, desc:"TCP/IP切替(’83)→WWW(’91)→爆発的普及。", cat:"tech" },
+    { title:"トランジスタ発明", year:1947, desc:"半導体時代の幕開け（ベル研）。", cat:"tech" },
+    { title:"有人月面着陸", year:1969, desc:"アポロ11号。", cat:"tech" },
+    { title:"原子爆弾の使用", year:1945, desc:"広島・長崎。", cat:"war" },
+    { title:"産業革命", year:1760, desc:"蒸気機関→工場制機械工業。", cat:"tech" },
+    { title:"活版印刷（西欧）", year:1440, desc:"グーテンベルク周辺の技術革新。", cat:"tech" },
+
+    // 日本文化・作品（指定があればここに）
+    { title:"幕末（るろうに剣心の舞台）", year:1868, desc:"明治維新前後。作品的には維新後もしばし描写。", cat:"culture" },
+    { title:"鎌倉時代初期（逃げ若）", year:1213, desc:"承久の乱直前期を中心に描くフィクション。", cat:"culture" },
+
+    // 古代
+    { title:"鉄器の普及（近東〜地中海）", year:-1200, desc:"地域差あり。製鉄が軍事・農業を変える。", cat:"tech" },
+    { title:"青銅器文明の成熟", year:-2000, desc:"合金・鋳造技術の広域展開。", cat:"tech" },
+    { title:"メソポタミア都市文明", year:-3500, desc:"文字・法・都市国家の成立。", cat:"culture" },
+    { title:"農耕革命", year:-10_000, desc:"定住と生産経済へ（地域差大）。", cat:"nature" },
+
+    // 先史（年BP指定）
+    { title:"犬の家畜化が広がる", bp: 15_000, desc:"人と犬の協働が定着。", cat:"nature" },
+    { title:"洞窟壁画（ラスコー等）", bp: 17_000, desc:"上部旧石器の芸術。", cat:"culture" },
+    { title:"ホモ・サピエンスの拡散", bp: 50_000, desc:"ユーラシアへ急速拡散（幅あり）。", cat:"nature" },
+    { title:"言語/象徴行動の高度化", bp: 70_000, desc:"考古学的指標からの推定。", cat:"culture" },
+    { title:"現生人類の成立（広義）", bp: 100_000, desc:"定義により幅。", cat:"nature" },
+  ];
+
+  // ===== DOM構築 =====
+  const bandsEl = document.getElementById('bands');
+  const eventsEl = document.getElementById('events');
+  const nowEl = document.getElementById('now');
+  const nowpin = document.getElementById('nowpin');
+  const container = document.querySelector('.container');
+
+  // サイズ反映
+  bandsEl.style.height = totalHeight + 'px';
+  container.style.height = totalHeight + 'px';
+
+  // Now表示・ピン
+  nowEl.textContent = `（現在: ${NOW_YEAR}年）`;
+  nowpin.style.top = (PAD_TOP) + 'px';
+
+  // 帯＆目盛り（1,10,100,1k,10k,100k 年BP）
+  const tickBPs = [1,10,100,1_000,10_000,100_000].filter(v => v<=MAX_YEARS_BP);
+  // 背景帯（各decadeで交互色）
+  for(let d=0; d<=Math.floor(Math.log10(MAX_YEARS_BP)); d++){
+    const y0 = PAD_TOP + yOf(10**d);
+    const y1 = PAD_TOP + yOf(Math.min(10**(d+1), MAX_YEARS_BP));
+    const bandBg = document.createElement('div');
+    bandBg.style.position = 'absolute';
+    bandBg.style.left='0'; bandBg.style.right='0';
+    bandBg.style.top = y0 + 'px';
+    bandBg.style.height = (y1 - y0) + 'px';
+    bandBg.style.background = (d % 2 === 0) ? 'var(--band1)' : 'var(--band2)';
+    bandBg.style.opacity = .6;
+    bandsEl.appendChild(bandBg);
+  }
+  // 罫線＋ラベル
+  for(const bp of tickBPs){
+    const y = PAD_TOP + yOf(bp);
+    const line = document.createElement('div');
+    line.className = 'band';
+    line.style.top = y + 'px';
+    line.innerHTML = `<span class="label">${formatBP(bp)} 前</span>`;
+    bandsEl.appendChild(line);
+  }
+
+  // イベント配置
+  events.forEach((ev, i) => {
+    const yearsAgo = ev.bp ?? yearsAgoFromYear(ev.year);
+    if (yearsAgo < 0 || yearsAgo > MAX_YEARS_BP) return; // 範囲外は捨てる
+    const y = PAD_TOP + yOf(yearsAgo);
+
+    const el = document.createElement('div');
+    el.className = `event ${ev.cat ?? 'other'}`;
+    el.style.top = y + 'px';
+
+    // 軽い左右ジッタで重なり回避
+    const jitter =  (i % 2 ? 0 : 8) + (i % 3 ? 0 : 6);
+    el.style.left = (32 + jitter) + 'px';
+
+    const yearLabel = ev.bp ? `${formatBP(ev.bp)}前` : formatYear(ev.year);
+    el.innerHTML = `
+      <div class="dot"></div>
+      <div class="card">
+        <p class="title">${escapeHtml(ev.title)}</p>
+        <div class="sub">${yearLabel}・${labelCat(ev.cat)}</div>
+      </div>
+    `;
+    el.addEventListener('click', () => openDetails(ev, yearLabel));
+    eventsEl.appendChild(el);
+  });
+
+  // 詳細パネル
+  const details = document.getElementById('details');
+  const dTitle = document.getElementById('dTitle');
+  const dMeta = document.getElementById('dMeta');
+  const dDesc = document.getElementById('dDesc');
+  document.getElementById('closeBtn').onclick = () => details.classList.remove('show');
+  function openDetails(ev, yearLabel){
+    dTitle.textContent = ev.title;
+    dMeta.textContent = `${yearLabel} / ${labelCat(ev.cat)}`;
+    dDesc.textContent = ev.desc ?? '';
+    details.classList.add('show');
+  }
+
+  // ユーティリティ
+  function yearsAgoFromYear(year){
+    // 天文学的年番号（year 0 を含む）で近似。厳密なBCE差1年は無視。
+    return NOW_YEAR - year;
+  }
+  function formatYear(year){
+    return year >= 1 ? `${year}年` : `紀元前${Math.abs(year - 1)}年`; // 0→紀元前1年相当
+  }
+  function formatBP(bp){
+    if (bp >= 100000) return (bp/1000).toLocaleString() + 'k年';
+    if (bp >= 1000) return (bp/1000) + 'k年';
+    return bp + '年';
+  }
+  function labelCat(c){
+    const map = { war:"戦争", tech:"技術", culture:"文化/社会", nature:"自然/人類史", other:"その他" };
+    return map[c] ?? 'その他';
+  }
+  function escapeHtml(s){ return (s ?? '').replace(/[&<>"']/g, m=>({ '&':'&lt;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;' }[m])); }
+
+  // 初期位置は最上部（現在）
+  window.scrollTo({ top: 0, behavior: 'instant' });
+</script>
