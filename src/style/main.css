@@ -39,3 +39,69 @@
   --noise: 1;
 }
 
+:root{
+  --bg: transparent; --fg:#e6e7ea; --muted:#9aa0a6; --accent:#7aa2ff; --line:#2a2f3a;
+  --tech:#00d1b2; --war:#ff6b6b; --culture:#ffd166; --nature:#8ecae6; --other:#c792ea;
+  --band1: transparent; --band2: transparent;
+  --dot: 10px;
+  --lane-w: 4px;
+  --content-w: min(680px, 92vw);
+}
+.app{min-height:100vh;position:relative}
+header{
+  position:sticky; top:0; z-index:10; backdrop-filter: blur(10px);
+  background:color-mix(in oklab, var(--bg) 75%, transparent);
+  border-bottom:1px solid var(--line); padding:10px 14px 8px;
+}
+header .row{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+h1{font-size:16px;margin:0}
+.meta{color:var(--muted);font-size:12px}
+.legend{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+.key{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.sw{width:10px;height:10px;border-radius:2px}
+.sw.tech{background:var(--tech)} .sw.war{background:var(--war)} .sw.culture{background:var(--culture)}
+.sw.nature{background:var(--nature)} .sw.other{background:var(--other)}
+.container{
+  width:var(--content-w); margin:0 auto; position:relative;
+}
+.bands{position:relative}
+.band{
+  position:absolute; left:0; right:0; border-top:1px dashed var(--line);
+  color:var(--muted); font-size:12px; padding-top:2px;
+}
+.band .label{position:absolute; left:8px; transform:translateY(-100%); background:transparent}
+.lane{
+  position:absolute; left:18px; top:0; bottom:0; width:var(--lane-w); background:linear-gradient(var(--line), var(--line));
+  border-radius:2px;
+}
+.event{
+  position:absolute; left:32px; display:flex; align-items:center; gap:10px;
+  max-width:calc(var(--content-w) - 56px); cursor:pointer;
+}
+.event .dot{
+  width:var(--dot); height:var(--dot); border-radius:50%;
+  box-shadow:0 0 0 2px rgba(0,0,0,.25);
+}
+.event .card{
+  background:#141821; border:1px solid var(--line); border-radius:10px; padding:8px 10px;
+}
+.event .title{font-size:14px;margin:0 0 3px 0}
+.event .sub{font-size:12px;color:var(--muted)}
+.event.tech .dot{background:var(--tech)}
+.event.war .dot{background:var(--war)}
+.event.culture .dot{background:var(--culture)}
+.event.nature .dot{background:var(--nature)}
+.event.other .dot{background:var(--other)}
+.hint{position:fixed; right:10px; bottom:12px; background:#141821; color:var(--muted);
+      font-size:12px; border:1px solid var(--line); border-radius:999px; padding:6px 10px; opacity:.85}
+.details{
+  position:fixed; left:0; right:0; bottom:0; z-index:20; transform:translateY(100%);
+  background:#121620; border-top:1px solid var(--line); border-radius:14px 14px 0 0;
+  box-shadow:0 -10px 30px rgba(0,0,0,.3); transition:transform .25s ease; padding:12px 14px 18px;
+}
+.details.show{transform:translateY(0)}
+.details h2{margin:0 0 4px 0; font-size:16px}
+.details .small{color:var(--muted); font-size:12px}
+.close{position:absolute; right:12px; top:8px; border:0; background:transparent; color:var(--muted); font-size:22px}
+/* small override for container height when JS sets it */
+.container{min-height:100vh}

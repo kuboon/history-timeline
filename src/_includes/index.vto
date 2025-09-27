@@ -2,31 +2,192 @@
 layout: layout.vto
 url: /
 title: top
-noindex: true
 ---
-<main data-pagefind-ignore="all">
-  <div
-    class="hero min-h-screen"
-    style="background-image: url(https://img.daisyui.com/images/stock/photo-1507358522600-9f71e620c44e.webp)"
-  >
-    <div class="hero-overlay"></div>
-    <div class="hero-content text-neutral-content text-center">
-      <div class="max-w-md">
-        <h1 class="mb-5 text-5xl font-bold">{{ hero.title }}</h1>
-        <div class="mb-5 prose">{{ hero.content |> md }}</div>
-      </div>
-    </div>
+<div class="legend">
+  <div class="key"><span class="sw war"></span>戦争</div>
+  <div class="key"><span class="sw tech"></span>技術</div>
+  <div class="key"><span class="sw culture"></span>文化/社会</div>
+  <div class="key"><span class="sw nature"></span>自然/人類史</div>
+  <div class="key"><span class="sw other"></span>その他</div>
+</div>
+
+<div class="app">
+  <div class="container">
+    <div class="lane"></div>
+    <div class="bands" id="bands"></div>
+    <div id="events"></div>
   </div>
-  <ul id="timeline" class="flex">
-    {{ for entry of search.pages("type=post", "date=desc") }}
-      <div class="card card-border bg-base-100 w-96 m-5">
-        <div class="card-body">
-          <a href="{{entry.url}}" class="after:absolute after:inset-0">
-            <h2 class="card-title">{{ entry.title }}</h2>
-            <p>{{ entry.published |> date('y年M月d日') }}</p>
-          </a>
-        </div>
+</div>
+
+<div class="details" id="details">
+  <button class="close" id="closeBtn" aria-label="閉じる">×</button>
+  <h2 id="dTitle"></h2>
+  <div class="small" id="dMeta"></div>
+  <p id="dDesc" style="margin-top:8px; line-height:1.5"></p>
+</div>
+
+<script>
+  // ===== パラメータ =====
+  const NOW = new Date();
+  const NOW_YEAR = NOW.getUTCFullYear();
+  const MAX_YEARS_BP = 100_000; // どこまで遡るか（年BP）
+  const PIXELS_PER_DECADE = 1000; // log10で1桁ぶんの高さ(px)
+  const PAD_TOP = 30, PAD_BOTTOM = 200;
+
+  // 対数スケール: yearsAgo(>=0) → y(px)
+  const yOf = (yearsAgo) => {
+    if (yearsAgo < 0) yearsAgo = 0;
+    return Math.log10(yearsAgo + 1) * PIXELS_PER_DECADE;
+  };
+
+  // レイアウト高さ
+  const totalHeight = yOf(MAX_YEARS_BP) + PAD_TOP + PAD_BOTTOM;
+
+  // ===== イベント定義（index.yml から取得して埋め込み） =====
+  const events = {{ events |> JSON.stringify }};
+
+  // ===== DOM構築 =====
+  const bandsEl = document.getElementById('bands');
+  const eventsEl = document.getElementById('events');
+  const container = document.querySelector('.container');
+
+  // サイズ反映
+  bandsEl.style.height = totalHeight + 'px';
+  container.style.height = totalHeight + 'px';
+
+  // 帯＆目盛り（1,10,100,1k,10k,100k 年BP）
+  const tickBPs = [1,10,100,1_000,10_000,100_000].filter(v => v<=MAX_YEARS_BP);
+  // 背景帯（各decadeで交互色）
+  for(let d=0; d<=Math.floor(Math.log10(MAX_YEARS_BP)); d++){
+    const y0 = PAD_TOP + yOf(10**d);
+    const y1 = PAD_TOP + yOf(Math.min(10**(d+1), MAX_YEARS_BP));
+    const bandBg = document.createElement('div');
+    bandBg.style.position = 'absolute';
+    bandBg.style.left='0'; bandBg.style.right='0';
+    bandBg.style.top = y0 + 'px';
+    bandBg.style.height = (y1 - y0) + 'px';
+    bandBg.style.background = (d % 2 === 0) ? 'var(--band1)' : 'var(--band2)';
+    bandBg.style.opacity = .6;
+    bandsEl.appendChild(bandBg);
+  }
+  // 罫線＋ラベル
+  for(const bp of tickBPs){
+    const y = PAD_TOP + yOf(bp);
+    const line = document.createElement('div');
+    line.className = 'band';
+    line.style.top = y + 'px';
+    line.innerHTML = `<span class="label">${formatBP(bp)} 前</span>`;
+    bandsEl.appendChild(line);
+  }
+
+  // イベント配置
+  events.forEach((ev, i) => {
+    const yearInfo = ev.bp == null ? parseYearSpec(ev.year) : null;
+    const anchorYear = ev.bp == null ? yearInfo.anchor : null;
+    const yearsAgo = ev.bp ?? yearsAgoFromYear(anchorYear);
+    if (yearsAgo < 0 || yearsAgo > MAX_YEARS_BP) return; // 範囲外は捨てる
+    const y = PAD_TOP + yOf(yearsAgo);
+
+    const el = document.createElement('div');
+    el.className = `event ${ev.cat ?? 'other'}`;
+    el.style.top = y + 'px';
+
+    // 軽い左右ジッタで重なり回避
+    const jitter =  (i % 2 ? 0 : 8) + (i % 3 ? 0 : 6);
+    el.style.left = (32 + jitter) + 'px';
+
+    const yearLabel = ev.bp ? `${formatBP(ev.bp)}前` : yearInfo.label;
+    el.innerHTML = `
+      <div class="dot"></div>
+      <div class="card">
+        <p class="title">${escapeHtml(ev.title)}</p>
+        <div class="sub">${yearLabel}・${labelCat(ev.cat)}</div>
       </div>
-    {{ /for }}
-  </ul>
-</main>
+    `;
+    el.addEventListener('click', () => openDetails(ev, yearLabel));
+    eventsEl.appendChild(el);
+  });
+
+  // 詳細パネル
+  const details = document.getElementById('details');
+  const dTitle = document.getElementById('dTitle');
+  const dMeta = document.getElementById('dMeta');
+  const dDesc = document.getElementById('dDesc');
+  document.getElementById('closeBtn').onclick = () => details.classList.remove('show');
+  function openDetails(ev, yearLabel){
+    dTitle.textContent = ev.title;
+    dMeta.textContent = `${yearLabel} / ${labelCat(ev.cat)}`;
+    dDesc.textContent = ev.desc ?? '';
+    details.classList.add('show');
+  }
+
+  // ユーティリティ
+  function yearsAgoFromYear(year){
+    // 天文学的年番号（year 0 を含む）で近似。厳密なBCE差1年は無視。
+    return NOW_YEAR - year;
+  }
+  function formatYear(year){
+    return year >= 1 ? `${year}年` : `紀元前${Math.abs(year - 1)}年`; // 0→紀元前1年相当
+  }
+  function formatYearRange(a, b){
+    if (b == null || a === b) return formatYear(a);
+    // a <= b を保証
+    const from = Math.min(a, b);
+    const to = Math.max(a, b);
+    return `${formatYear(from)}–${formatYear(to)}`;
+  }
+  function parseYearSpec(spec){
+    // 許容: number | [from,to] | {from,to}/{start,end} | "from-to" いずれも整数可（負数=BCE）
+    // 戻り値: { anchor:number, label:string }
+    if (spec == null) return { anchor: NOW_YEAR, label: '' };
+    // number
+    if (typeof spec === 'number'){
+      return { anchor: spec, label: formatYear(spec) };
+    }
+    // array [from, to]
+    if (Array.isArray(spec) && spec.length >= 1){
+      const from = Number(spec[0]);
+      const to = spec.length > 1 ? Number(spec[1]) : undefined;
+      return { anchor: from, label: formatYearRange(from, to) };
+    }
+    // object {from,to} or {start,end}
+    if (typeof spec === 'object'){
+      const from = Number(spec.from ?? spec.start ?? spec.begin ?? spec.s ?? spec.a ?? spec.min ?? NaN);
+      const to = spec.to ?? spec.end ?? spec.finish ?? spec.e ?? spec.b ?? spec.max;
+      if (!Number.isNaN(from)){
+        const toNum = to != null ? Number(to) : undefined;
+        return { anchor: from, label: formatYearRange(from, toNum) };
+      }
+    }
+    // string "from-to" or single
+    if (typeof spec === 'string'){
+      const s = spec.trim();
+      // サロゲート各種ダッシュに対応
+      const m = s.match(/^\s*([+-]?\d+)\s*[\-–—~〜]\s*([+-]?\d+)\s*$/);
+      if (m){
+        const from = Number(m[1]);
+        const to = Number(m[2]);
+        return { anchor: from, label: formatYearRange(from, to) };
+      }
+      const n = Number(s);
+      if (!Number.isNaN(n)){
+        return { anchor: n, label: formatYear(n) };
+      }
+    }
+    // フォールバック: 現在年
+    return { anchor: NOW_YEAR, label: '' };
+  }
+  function formatBP(bp){
+    if (bp >= 100000) return (bp/1000).toLocaleString() + 'k年';
+    if (bp >= 1000) return (bp/1000) + 'k年';
+    return bp + '年';
+  }
+  function labelCat(c){
+    const map = { war:"戦争", tech:"技術", culture:"文化/社会", nature:"自然/人類史", other:"その他" };
+    return map[c] ?? 'その他';
+  }
+  function escapeHtml(s){ return (s ?? '').replace(/[&<>"']/g, m=>({ '&':'&lt;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;' }[m])); }
+
+  // 初期位置は最上部（現在）
+  window.scrollTo({ top: 0, behavior: 'instant' });
+</script>

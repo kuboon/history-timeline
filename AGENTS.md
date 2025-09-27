@@ -1,0 +1,20 @@
+# about Lume
+- Lume is a Deno-based static site generator.
+- Typical structure: `src/` sources, `_config.ts` config, `_site/` output.
+- Dev server: `deno task serve` (port shown in logs).
+- Build: `deno task build` generates static files in `_site/`.
+- Pages: place `.md`/`.njk`/`.eta`/`.html` under `src/` to transform.
+- Layouts: put templates in `_includes/` and set `layout` in front matter.
+- Front matter: YAML between `---` (`title`, `date`, `layout`, `tags`, etc.).
+- Data: files in `_data/` (`.json/.yaml/.ts`) provide global/section variables.
+- Static assets: images/CSS/JS are copied; control via `site.copy(...)` if needed.
+- Collections: group by `tags` and loop in templates to list pages.
+- Templating: Nunjucks, Eta, Markdown selected by extension; can be combined.
+- Plugins: enable in `_config.ts` via `site.use(...)` (e.g., `markdown`, `eta`, `postcss`).
+- Routing: control output with `url`/`permalink`; per-directory settings possible.
+- Exclude/copy rules: use `site.ignore(...)` and `site.copy(...)` in config.
+- Base URL: set `site.options.location` to match the deploy domain.
+- Live reload: dev server rebuilds on save and refreshes the browser.
+- Deploy: publish `_site/` to static hosting (e.g., GitHub Pages).
+- Docs: https://lume.land/docs/overview/about-lume/
+- Scope: applies to this folder and all subfolders.

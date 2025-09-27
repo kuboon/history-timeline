@@ -58,6 +58,5 @@ site.use(sitemap({
   query: "noindex!=true",
 }));
 site.use(vento());
-site.add("timeline.html")
 
 export default site;
